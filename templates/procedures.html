@@ -1,188 +1,55 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestão de Procedimentos</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 40px; background-color: #f9f9f9; color: #333; }
-        h1, h2 { color: #0056b3; }
-        table { width: 100%; border-collapse: collapse; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); background-color: white; }
-        th, td { border: 1px solid #ddd; text-align: left; padding: 12px; }
-        thead tr { background-color: #007bff; color: white; }
-        tbody tr:nth-child(even) { background-color: #f2f2f2; }
-        a { color: #007bff; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        form { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }
-        input[type="text"], input[type="number"], textarea { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        button { padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; color: white; }
-        .btn-submit { background-color: #28a745; }
-        .btn-submit:hover { background-color: #218838; }
-        .btn-delete { background-color: #dc3545; }
-        .btn-delete:hover { background-color: #c82333; }
-        .btn-edit { background-color: #ffc107; color: black; }
-        .btn-edit:hover { background-color: #e0a800; }
-        .modal { display: none; position: fixed; z-index: 1; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); }
-        .modal-content { background-color: #fefefe; margin: 10% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 700px; border-radius: 8px; }
-        .close-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; }
-        .close-btn:hover, .close-btn:focus { color: black; text-decoration: none; cursor: pointer; }
-        .pagination { margin-top: 20px; text-align: center; }
-        .pagination a { margin: 0 10px; font-weight: bold; }
-    </style>
-</head>
-<body>
-    <h1>Gestão de Procedimentos</h1>
-    <p><a href="/">Voltar para Pacientes</a> | <a href="/users">Ver Lista de Usuários</a></p>
+{% extends "base.html" %}
 
-    <h2>Cadastrar Novo Procedimento</h2>
-    <form id="form-cadastro-procedimento">
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-            <input type="text" id="nome" placeholder="Nome do Procedimento" required>
-            <input type="number" step="0.01" id="valor_particular" placeholder="Valor Particular (Ex: 150.00)" required>
-            <input type="number" step="0.01" id="valor_plano_saude" placeholder="Valor Plano de Saúde (Ex: 80.50)" required>
-        </div>
-        <textarea id="descricao" placeholder="Descrição do Procedimento" rows="3"></textarea>
-        <button type="submit" class="btn-submit">Cadastrar Procedimento</button>
-    </form>
-    <hr style="margin: 30px 0;">
+{% block title %}Lista de Procedimentos{% endblock %}
 
-    <h2>Procedimentos Cadastrados</h2>
-    <table>
+{% block content %}
+<div class="content-card">
+    <div class="card-header">
+        <h1>Procedimentos Cadastrados</h1>
+        {% if session.user_tipo == 'admin' %}
+        <a href="{{ url_for('create_procedure') }}" class="btn btn-primary">Adicionar Procedimento</a>
+        {% endif %}
+    </div>
+
+    <table class="data-table">
         <thead>
             <tr>
-                <th>ID</th>
                 <th>Nome</th>
-                <th>Valor Particular</th>
-                <th>Valor Plano</th>
+                <th>Descrição</th>
+                <th>Valor Plano (R$)</th>
+                <th>Valor Particular (R$)</th>
+                {% if session.user_tipo == 'admin' %}
                 <th>Ações</th>
+                {% endif %}
             </tr>
         </thead>
         <tbody>
             {% for procedure in pagination.items %}
             <tr>
-                <td>{{ procedure.id }}</td>
                 <td>{{ procedure.nome }}</td>
-                <td>R$ {{ "%.2f"|format(procedure.valor_particular|float) }}</td>
-                <td>R$ {{ "%.2f"|format(procedure.valor_plano_saude|float) }}</td>
+                <td>{{ procedure.descricao if procedure.descricao else 'N/A' }}</td>
+                <td>{{ "%.2f"|format(procedure.valor_plano_saude) }}</td>
+                <td>{{ "%.2f"|format(procedure.valor_particular) }}</td>
+                {% if session.user_tipo == 'admin' %}
                 <td>
-                    <button class="btn-edit" onclick="openEditModal({{ procedure.id }})">Editar</button>
-                    <button class="btn-delete" onclick="deleteProcedure({{ procedure.id }})">Excluir</button>
+                    <a href="{{ url_for('edit_procedure', procedure_id=procedure.id) }}" class="action-link">Editar</a>
+                    <form action="{{ url_for('delete_procedure', procedure_id=procedure.id) }}" method="post" style="display:inline;">
+                        <button type="submit" class="action-link delete-btn" onclick="return confirm('Tem certeza que deseja remover este procedimento?')">Deletar</button>
+                    </form>
                 </td>
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="5" style="text-align: center;">Nenhum procedimento encontrado.</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 
+    {% if pagination.pages > 1 %}
     <div class="pagination">
-        {% if pagination.has_prev %}
-            <a href="{{ url_for(endpoint, page=pagination.prev_num) }}">&laquo; Página Anterior</a>
-        {% endif %}
-        <span>Página {{ pagination.page }} de {{ pagination.pages }}</span>
-        {% if pagination.has_next %}
-            <a href="{{ url_for(endpoint, page=pagination.next_num) }}">Próxima Página &raquo;</a>
-        {% endif %}
-    </div>
-
-    <div id="editModal" class="modal">
-        <div class="modal-content">
-            <span class="close-btn" onclick="closeEditModal()">&times;</span>
-            <h2>Editar Procedimento</h2>
-            <form id="form-edit-procedimento">
-                <input type="hidden" id="edit-procedimento-id">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-                    <input type="text" id="edit-nome" required>
-                    <input type="number" step="0.01" id="edit-valor_particular" required>
-                    <input type="number" step="0.01" id="edit-valor_plano_saude" required>
-                </div>
-                <textarea id="edit-descricao" rows="3"></textarea>
-                <button type="submit" class="btn-submit">Salvar Alterações</button>
-            </form>
         </div>
-    </div>
-
-    <script>
-        const token = "COLE_SEU_TOKEN_DE_ADMIN_AQUI";
-
-        document.getElementById('form-cadastro-procedimento').addEventListener('submit', async function (event) {
-            event.preventDefault();
-            const dados = {
-                nome: document.getElementById('nome').value,
-                descricao: document.getElementById('descricao').value,
-                valor_particular: parseFloat(document.getElementById('valor_particular').value),
-                valor_plano_saude: parseFloat(document.getElementById('valor_plano_saude').value)
-            };
-            try {
-                const response = await fetch('/api/procedures', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify(dados)
-                });
-                const result = await response.json();
-                if (response.ok) {
-                    alert('Procedimento cadastrado com sucesso!');
-                    window.location.reload(); 
-                } else { alert(`Erro: ${result.message}`); }
-            } catch (error) { console.error('Erro:', error); }
-        });
-
-        async function deleteProcedure(id) {
-            if (!confirm('Tem certeza que deseja excluir este procedimento?')) { return; }
-            try {
-                const response = await fetch(`/api/procedures/${id}`, {
-                    method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }
-                });
-                const result = await response.json();
-                if (response.ok) {
-                    alert(result.message);
-                    window.location.reload();
-                } else { alert(`Erro: ${result.message}`); }
-            } catch (error) { console.error('Erro:', error); }
-        }
-
-        const editModal = document.getElementById('editModal');
-
-        async function openEditModal(id) {
-            try {
-                const response = await fetch(`/api/procedures/${id}`, { headers: { 'Authorization': `Bearer ${token}` } });
-                if (!response.ok) throw new Error('Falha ao buscar dados.');
-                const proc = await response.json();
-                document.getElementById('edit-procedimento-id').value = proc.id;
-                document.getElementById('edit-nome').value = proc.nome;
-                document.getElementById('edit-descricao').value = proc.descricao;
-                document.getElementById('edit-valor_particular').value = proc.valor_particular;
-                document.getElementById('edit-valor_plano_saude').value = proc.valor_plano_saude;
-                editModal.style.display = 'block';
-            } catch (error) { console.error('Erro:', error); }
-        }
-
-        function closeEditModal() {
-            editModal.style.display = 'none';
-        }
-
-        document.getElementById('form-edit-procedimento').addEventListener('submit', async function(event) {
-            event.preventDefault();
-            const procId = document.getElementById('edit-procedimento-id').value;
-            const dados = {
-                nome: document.getElementById('edit-nome').value,
-                descricao: document.getElementById('edit-descricao').value,
-                valor_particular: parseFloat(document.getElementById('edit-valor_particular').value),
-                valor_plano_saude: parseFloat(document.getElementById('edit-valor_plano_saude').value)
-            };
-            try {
-                const response = await fetch(`/api/procedures/${procId}`, {
-                    method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify(dados)
-                });
-                const result = await response.json();
-                if (response.ok) {
-                    alert('Procedimento atualizado com sucesso!');
-                    window.location.reload();
-                } else { alert(`Erro: ${result.message}`); }
-            } catch (error) { console.error('Erro:', error); }
-        });
-
-        window.onclick = function(event) {
-            if (event.target == editModal) { closeEditModal(); }
-        }
-    </script>
-</body>
-</html>
+    {% endif %}
+</div>
+{% endblock %}

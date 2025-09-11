@@ -111,6 +111,8 @@ class Appointment(db.Model):
     usuario_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     valor_total = db.Column(db.Numeric(10, 2), nullable=False)
     
+    patient = db.relationship('Patient')
+    user = db.relationship('User')
     procedures = db.relationship('Procedure', secondary=appointment_procedures, back_populates='appointments')
 
     def to_json(self):

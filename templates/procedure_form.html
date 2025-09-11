@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Editar' if procedure else 'Adicionar' }} Procedimento{% endblock %}
+
+{% block content %}
+<div class="content-card">
+    <div class="card-header">
+        <h1>{{ 'Editar Procedimento' if procedure else 'Adicionar Novo Procedimento' }}</h1>
+    </div>
+
+    <form method="post" class="form-container">
+        <div class="form-group">
+            <label for="nome">Nome do Procedimento</label>
+            <input type="text" id="nome" name="nome" class="form-control" value="{{ procedure.nome if procedure else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="descricao">Descrição</label>
+            <textarea id="descricao" name="descricao" class="form-control" rows="3">{{ procedure.descricao if procedure else '' }}</textarea>
+        </div>
+        <div class="form-group">
+            <label for="valor_plano_saude">Valor Plano de Saúde (R$)</label>
+            <input type="number" step="0.01" id="valor_plano_saude" name="valor_plano_saude" class="form-control" value="{{ procedure.valor_plano_saude if procedure else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="valor_particular">Valor Particular (R$)</label>
+            <input type="number" step="0.01" id="valor_particular" name="valor_particular" class="form-control" value="{{ procedure.valor_particular if procedure else '' }}" required>
+        </div>
+        
+        <button type="submit" class="btn btn-primary">{{ 'Salvar Alterações' if procedure else 'Cadastrar Procedimento' }}</button>
+        <a href="{{ url_for('procedure_list') }}" class="btn-secondary">Cancelar</a>
+    </form>
+</div>
+{% endblock %}

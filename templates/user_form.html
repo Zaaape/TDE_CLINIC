@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Editar' if user else 'Adicionar' }} Usuário{% endblock %}
+
+{% block content %}
+<div class="content-card">
+    <div class="card-header">
+        <h1>{{ 'Editar Usuário' if user else 'Adicionar Novo Usuário' }}</h1>
+    </div>
+
+    <form method="post" class="form-container">
+        <div class="form-group">
+            <label for="nome">Nome Completo</label>
+            <input type="text" id="nome" name="nome" class="form-control" value="{{ user.nome if user else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" class="form-control" value="{{ user.email if user else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="tipo">Tipo de Acesso</label>
+            <select name="tipo" id="tipo" class="form-control" required>
+                <option value="default" {{ 'selected' if user and user.tipo == 'default' }}>Padrão</option>
+                <option value="admin" {{ 'selected' if user and user.tipo == 'admin' }}>Administrador</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="senha">Senha</label>
+            <input type="password" id="senha" name="senha" class="form-control" {{ 'required' if not user }}>
+            {% if user %}
+            <small>Deixe em branco para não alterar a senha.</small>
+            {% endif %}
+        </div>
+        
+        <button type="submit" class="btn btn-primary">{{ 'Salvar Alterações' if user else 'Cadastrar Usuário' }}</button>
+        <a href="{{ url_for('user_list') }}" class="btn-secondary">Cancelar</a>
+    </form>
+</div>
+{% endblock %}

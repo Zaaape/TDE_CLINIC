@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}Novo Atendimento{% endblock %}
+
+{% block content %}
+<div class="content-card">
+    <div class="card-header">
+        <h1>Agendar Novo Atendimento</h1>
+    </div>
+
+    <form action="{{ url_for('create_appointment_form') }}" method="post" class="form-container">
+        
+        <div class="form-group">
+            <label for="paciente_id">Paciente</label>
+            <select name="paciente_id" id="paciente_id" class="form-control" required>
+                <option value="">Selecione um paciente...</option>
+                {% for paciente in pacientes %}
+                <option value="{{ paciente.id }}">{{ paciente.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="data_atendimento">Data e Hora do Atendimento</label>
+            <input type="datetime-local" id="data_atendimento" name="data_atendimento" class="form-control" required>
+        </div>
+
+        <div class="form-group">
+            <label>Tipo de Atendimento</label>
+            <div class="radio-group">
+                <input type="radio" id="tipo_particular" name="tipo" value="particular" checked onchange="togglePlano()">
+                <label for="tipo_particular">Particular</label>
+                <input type="radio" id="tipo_plano" name="tipo" value="plano" onchange="togglePlano()">
+                <label for="tipo_plano">Plano de Saúde</label>
+            </div>
+        </div>
+
+        <div class="form-group" id="plano_saude_field" style="display: none;">
+            <label for="numero_carteira_plano">Número da Carteira do Plano</label>
+            <input type="text" id="numero_carteira_plano" name="numero_carteira_plano" class="form-control">
+        </div>
+
+        <div class="form-group">
+            <label>Procedimentos</label>
+            <div class="checkbox-group">
+            {% for procedure in procedimentos %}
+                <div class="checkbox-item">
+                    <input type="checkbox" id="proc_{{ procedure.id }}" name="procedure_ids" value="{{ procedure.id }}">
+                    <label for="proc_{{ procedure.id }}">{{ procedure.nome }} (R$ {{ "%.2f"|format(procedure.valor_particular) }})</label>
+                </div>
+            {% endfor %}
+            </div>
+        </div>
+        
+        <button type="submit" class="btn btn-primary">Agendar</button>
+        <a href="{{ url_for('appointment_list') }}" class="btn-secondary">Cancelar</a>
+    </form>
+</div>
+
+<script>
+    function togglePlano() {
+        const planoField = document.getElementById('plano_saude_field');
+        if (document.getElementById('tipo_plano').checked) {
+            planoField.style.display = 'block';
+        } else {
+            planoField.style.display = 'none';
+        }
+    }
+</script>
+**{% endblock %}**

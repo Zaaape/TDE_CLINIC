@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <title>{% block title %}ClinicaTDE{% endblock %}</title>
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <a href="{{ url_for('index') }}" class="logo">ClinicaTDE</a>
+            <nav class="main-nav">
+                {% if session.user_id %}
+                    <a href="{{ url_for('index') }}">Pacientes</a>
+                    
+                    {% if session.user_tipo == 'admin' %}
+                    <a href="{{ url_for('user_list') }}">Usuários</a>
+                    {% endif %}
+
+                    <a href="{{ url_for('procedure_list') }}">Procedimentos</a>
+                    <a href="{{ url_for('appointment_list') }}">Atendimentos</a>
+                    <a href="{{ url_for('logout') }}" class="btn-logout">Sair</a>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="container">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <p>&copy; 2025 ClinicaTDE - Projeto de Faculdade</p>
+    </footer>
+</body>
+</html>

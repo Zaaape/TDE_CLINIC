@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Editar' if patient else 'Adicionar' }} Paciente{% endblock %}
+
+{% block content %}
+<div class="content-card">
+    <div class="card-header">
+        <h1>{{ 'Editar Paciente' if patient else 'Adicionar Novo Paciente' }}</h1>
+    </div>
+
+    <form method="post" class="form-container">
+        <h3>Dados Pessoais</h3>
+        <div class="form-group">
+            <label for="nome">Nome Completo</label>
+            <input type="text" id="nome" name="nome" class="form-control" value="{{ patient.nome if patient else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="cpf">CPF</label>
+            <input type="text" id="cpf" name="cpf" class="form-control" value="{{ patient.cpf if patient else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" class="form-control" value="{{ patient.email if patient else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="telefone">Telefone</label>
+            <input type="tel" id="telefone" name="telefone" class="form-control" value="{{ patient.telefone if patient else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="data_nascimento">Data de Nascimento</label>
+            <input type="date" id="data_nascimento" name="data_nascimento" class="form-control" value="{{ patient.data_nascimento.strftime('%Y-%m-%d') if patient else '' }}" required>
+        </div>
+
+        <h3>Endereço</h3>
+        <div class="form-group">
+            <label for="cep">CEP</label>
+            <input type="text" id="cep" name="cep" class="form-control" value="{{ patient.cep if patient else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="rua">Rua</label>
+            <input type="text" id="rua" name="rua" class="form-control" value="{{ patient.rua if patient else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="numero">Número</label>
+            <input type="text" id="numero" name="numero" class="form-control" value="{{ patient.numero if patient else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="bairro">Bairro</label>
+            <input type="text" id="bairro" name="bairro" class="form-control" value="{{ patient.bairro if patient else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="cidade">Cidade</label>
+            <input type="text" id="cidade" name="cidade" class="form-control" value="{{ patient.cidade if patient else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="estado">Estado</label>
+            <input type="text" id="estado" name="estado" class="form-control" value="{{ patient.estado if patient else '' }}" required>
+        </div>
+
+        <h3>Dados do Responsável (se aplicável)</h3>
+        <div class="form-group">
+            <label for="responsavel_nome">Nome do Responsável</label>
+            <input type="text" id="responsavel_nome" name="responsavel_nome" class="form-control" value="{{ patient.responsavel_nome if patient else '' }}">
+        </div>
+         <div class="form-group">
+            <label for="responsavel_cpf">CPF do Responsável</label>
+            <input type="text" id="responsavel_cpf" name="responsavel_cpf" class="form-control" value="{{ patient.responsavel_cpf if patient else '' }}">
+        </div>
+        
+        <button type="submit" class="btn btn-primary">{{ 'Salvar Alterações' if patient else 'Cadastrar Paciente' }}</button>
+        <a href="{{ url_for('index') }}" class="btn-secondary">Cancelar</a>
+    </form>
+</div>
+{% endblock %}
