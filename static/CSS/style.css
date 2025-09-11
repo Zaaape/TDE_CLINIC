@@ -345,3 +345,15 @@ body.login-body {
         box-shadow: none;
     }
 }
+
+.radio-group {
+    display: flex;
+    align-items: center;
+    gap: 25px;
+}
+
+.radio-group label {
+    display: inline-block;
+    font-weight: normal;
+    margin-bottom: 0;
+}

@@ -23,9 +23,9 @@
             {% for patient in pagination.items %}
             <tr>
                 <td>{{ patient.nome }}</td>
-                <td>{{ patient.cpf }}</td>
+                <td>{{ patient.cpf | cpf }}</td>
                 <td>{{ patient.email }}</td>
-                <td>{{ patient.telefone }}</td>
+                <td>{{ patient.telefone | telefone }}</td>
                 <td>
                     <a href="{{ url_for('edit_patient', patient_id=patient.id) }}" class="action-link">Editar</a>
                     <form action="{{ url_for('delete_patient', patient_id=patient.id) }}" method="post" style="display:inline;">

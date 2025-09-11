@@ -5,10 +5,32 @@ from routes import api
 from flask_migrate import Migrate
 from datetime import datetime
 from functools import wraps
+import re
+
+def format_cpf(value):
+    if not value:
+        return ""
+    digits = re.sub(r'\D', '', value)
+    if len(digits) == 11:
+        return f'{digits[:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}'
+    return value
+
+def format_telefone(value):
+    if not value:
+        return ""
+    digits = re.sub(r'\D', '', value)
+    if len(digits) == 11:
+        return f'({digits[:2]}) {digits[2]} {digits[3:7]}-{digits[7:]}'
+    if len(digits) == 10: 
+        return f'({digits[:2]}) {digits[2:6]}-{digits[6:]}'
+    return value
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+
+    app.jinja_env.filters['cpf'] = format_cpf
+    app.jinja_env.filters['telefone'] = format_telefone
 
     db.init_app(app)
     bcrypt.init_app(app)
@@ -16,7 +38,6 @@ def create_app():
 
     app.register_blueprint(api, url_prefix='/api')
 
-    # --- DECORADORES DE AUTENTICAÇÃO ---
     def login_required(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
@@ -39,7 +60,6 @@ def create_app():
             return f(*args, **kwargs)
         return decorated_function
 
-    # --- ROTAS DE AUTENTICAÇÃO ---
     @app.route("/login", methods=['GET', 'POST'])
     def login():
         if request.method == 'POST':
@@ -49,7 +69,7 @@ def create_app():
             if user and user.check_password(senha):
                 session['user_id'] = user.id
                 session['user_nome'] = user.nome
-                session['user_tipo'] = user.tipo # <-- IMPORTANTE PARA PERMISSÕES
+                session['user_tipo'] = user.tipo 
                 flash(f'Login bem-sucedido! Bem-vindo, {user.nome}.', 'success')
                 return redirect(url_for('index'))
             else:
@@ -62,8 +82,7 @@ def create_app():
         session.clear()
         flash('Você saiu do sistema.', 'success')
         return redirect(url_for('login'))
-
-    # --- ROTAS PRINCIPAIS ---
+    
     @app.route("/")
     @login_required
     def index():
@@ -71,7 +90,6 @@ def create_app():
         pacientes_paginados = Patient.query.order_by(Patient.nome).paginate(page=page, per_page=10, error_out=False)
         return render_template("index.html", pagination=pacientes_paginados, endpoint='index')
 
-    # --- ROTAS DE USUÁRIOS (CRUD COMPLETO E PROTEGIDO) ---
     @app.route("/users")
     @admin_required
     def user_list():
@@ -125,7 +143,7 @@ def create_app():
 
     # --- ROTAS DE PROCEDIMENTOS (CRUD COMPLETO E PROTEGIDO) ---
     @app.route("/procedures")
-    @login_required # Todos podem ver, mas apenas admin pode editar/deletar
+    @login_required 
     def procedure_list():
         page = request.args.get('page', 1, type=int)
         procedimentos_paginados = Procedure.query.order_by(Procedure.nome).paginate(page=page, per_page=10, error_out=False)

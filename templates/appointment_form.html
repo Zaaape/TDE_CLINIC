@@ -28,9 +28,9 @@
         <div class="form-group">
             <label>Tipo de Atendimento</label>
             <div class="radio-group">
-                <input type="radio" id="tipo_particular" name="tipo" value="particular" checked onchange="togglePlano()">
+                <input type="radio" id="tipo_particular" name="tipo" value="particular" checked onchange="handleTypeChange()">
                 <label for="tipo_particular">Particular</label>
-                <input type="radio" id="tipo_plano" name="tipo" value="plano" onchange="togglePlano()">
+                <input type="radio" id="tipo_plano" name="tipo" value="plano" onchange="handleTypeChange()">
                 <label for="tipo_plano">Plano de Saúde</label>
             </div>
         </div>
@@ -44,9 +44,11 @@
             <label>Procedimentos</label>
             <div class="checkbox-group">
             {% for procedure in procedimentos %}
-                <div class="checkbox-item">
+                <div class="checkbox-item" 
+                     data-valor-particular="{{ procedure.valor_particular }}"
+                     data-valor-plano="{{ procedure.valor_plano_saude }}">
                     <input type="checkbox" id="proc_{{ procedure.id }}" name="procedure_ids" value="{{ procedure.id }}">
-                    <label for="proc_{{ procedure.id }}">{{ procedure.nome }} (R$ {{ "%.2f"|format(procedure.valor_particular) }})</label>
+                    <label for="proc_{{ procedure.id }}">{{ procedure.nome }} <span class="procedure-price">(R$ {{ "%.2f"|format(procedure.valor_particular) }})</span></label>
                 </div>
             {% endfor %}
             </div>
@@ -58,13 +60,27 @@
 </div>
 
 <script>
-    function togglePlano() {
+    function handleTypeChange() {
+        
         const planoField = document.getElementById('plano_saude_field');
-        if (document.getElementById('tipo_plano').checked) {
-            planoField.style.display = 'block';
-        } else {
-            planoField.style.display = 'none';
-        }
+        const isPlano = document.getElementById('tipo_plano').checked;
+        planoField.style.display = isPlano ? 'block' : 'none';
+
+        const procedureItems = document.querySelectorAll('.checkbox-item');
+        procedureItems.forEach(item => {
+            const priceSpan = item.querySelector('.procedure-price');
+            let newPrice;
+
+            if (isPlano) {
+                newPrice = parseFloat(item.dataset.valorPlano).toFixed(2);
+            } else {
+                newPrice = parseFloat(item.dataset.valorParticular).toFixed(2);
+            }
+            
+            priceSpan.textContent = `(R$ ${newPrice.replace('.', ',')})`;
+        });
     }
+
+    document.addEventListener('DOMContentLoaded', handleTypeChange);
 </script>
-**{% endblock %}**
+{% endblock %}

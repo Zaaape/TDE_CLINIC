@@ -50,7 +50,6 @@ def admin_required(f):
         return f(current_user, *args, **kwargs)
     return decorated
 
-# --- Rotas de Usuários ---
 
 @api.route('/login', methods=['POST'])
 def login():
