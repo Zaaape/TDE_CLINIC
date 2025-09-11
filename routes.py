@@ -1,0 +1,513 @@
+from flask import Blueprint, request, jsonify, current_app
+from models import db, User, Patient, Appointment, Procedure, appointment_procedures
+import jwt
+import datetime
+from functools import wraps
+import os
+
+api = Blueprint('api', __name__)
+
+def generate_token(user):
+    try:
+        payload = {
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(days=1),
+            'iat': datetime.datetime.utcnow(),
+            'sub': str(user.id),
+            'tipo': user.tipo
+        }
+        return jwt.encode(
+            payload,
+            current_app.config.get('SECRET_KEY'),
+            algorithm='HS256'
+        )
+    except Exception as e:
+        return e
+
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        if 'Authorization' in request.headers:
+            token = request.headers['Authorization'].split(" ")[1]
+
+        if not token:
+            return jsonify({'message': 'Token é obrigatório!'}), 401
+
+        try:
+            data = jwt.decode(token, current_app.config.get('SECRET_KEY'), algorithms=['HS256'])
+            current_user = User.query.get(data['sub'])
+        except:
+            return jsonify({'message': 'Token inválido!'}), 401
+
+        return f(current_user, *args, **kwargs)
+    return decorated
+
+def admin_required(f):
+    @wraps(f)
+    def decorated(current_user, *args, **kwargs):
+        if current_user.tipo != 'admin':
+            return jsonify({'message': 'Acesso negado. Requer privilégios de administrador.'}), 403
+        return f(current_user, *args, **kwargs)
+    return decorated
+
+# --- Rotas de Usuários ---
+
+@api.route('/login', methods=['POST'])
+def login():
+    auth = request.get_json()
+    if not auth or not auth.get('email') or not auth.get('senha'):
+        return jsonify({'message': 'Email e senha são obrigatórios!'}), 400
+
+    user = User.query.filter_by(email=auth['email']).first()
+    if not user or not user.check_password(auth['senha']):
+        return jsonify({'message': 'Credenciais inválidas!'}), 401
+
+    token = generate_token(user)
+    return jsonify({'token': token})
+
+@api.route('/users', methods=['POST'])
+@token_required
+@admin_required
+def create_user(current_user):
+    data = request.get_json()
+    if not data or not data.get('email') or not data.get('senha') or not data.get('nome'):
+        return jsonify({'message': 'Dados incompletos!'}), 400
+
+    if User.query.filter_by(email=data['email']).first():
+        return jsonify({'message': 'Usuário com este e-mail já existe.'}), 409
+
+    new_user = User(
+        email=data['email'],
+        nome=data['nome'],
+        tipo=data.get('tipo', 'default')
+    )
+    new_user.set_password(data['senha'])
+    db.session.add(new_user)
+    db.session.commit()
+    return jsonify(new_user.to_json()), 201
+
+@api.route('/users/<int:user_id>', methods=['PUT'])
+@token_required
+def update_user(current_user, user_id):
+    if current_user.id != user_id:
+        return jsonify({'message': 'Acesso não autorizado para atualizar este usuário.'}), 403
+
+    user_to_update = User.query.get_or_404(user_id)
+    data = request.get_json()
+
+    user_to_update.nome = data.get('nome', user_to_update.nome)
+    
+    new_email = data.get('email')
+    if new_email and new_email != user_to_update.email:
+        if User.query.filter_by(email=new_email).first():
+            return jsonify({'message': 'Este e-mail já está em uso.'}), 409
+        user_to_update.email = new_email
+        
+    db.session.commit()
+    return jsonify(user_to_update.to_json()), 200
+
+@api.route('/users/<int:user_id>', methods=['DELETE'])
+@token_required
+@admin_required
+def delete_user(current_user, user_id):
+    if current_user.id == user_id:
+        return jsonify({'message': 'Um administrador não pode remover a si mesmo.'}), 403
+    
+    atendimento_existente = Appointment.query.filter_by(usuario_id=user_id).first()
+    if atendimento_existente:
+        return jsonify({'message': 'Não é possível remover um usuário com atendimentos vinculados.'}), 409
+
+    user_to_delete = User.query.get_or_404(user_id)
+    db.session.delete(user_to_delete)
+    db.session.commit()
+    return jsonify({'message': f'Usuário {user_to_delete.nome} removido com sucesso.'}), 200
+
+@api.route('/patients', methods=['POST'])
+@token_required
+def create_patient(current_user):
+    data = request.get_json()
+    required_fields = ["cpf", "nome", "email", "telefone", "data_nascimento", "estado", "cidade", "bairro", "cep", "rua", "numero"]
+    if not all(field in data for field in required_fields):
+        return jsonify({"message": "Campos obrigatórios do paciente faltando."}), 400
+    if Patient.query.filter_by(cpf=data['cpf']).first():
+        return jsonify({"message": "CPF já cadastrado."}), 409
+    if Patient.query.filter_by(email=data['email']).first():
+        return jsonify({"message": "Email já cadastrado."}), 409
+    try:
+        data_nascimento = datetime.datetime.strptime(data['data_nascimento'], '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({"message": "Formato de data de nascimento inválido. Use AAAA-MM-DD."}), 400
+    age = (datetime.date.today() - data_nascimento).days / 365.25
+    if age < 18:
+        required_guardian_fields = ["responsavel_cpf", "responsavel_nome", "responsavel_data_nascimento", "responsavel_email", "responsavel_telefone"]
+        if not all(field in data for field in required_guardian_fields):
+            return jsonify({"message": "Campos obrigatórios do responsável faltando para paciente menor de idade."}), 400
+        try:
+            responsavel_data_nascimento = datetime.datetime.strptime(data['responsavel_data_nascimento'], '%Y-%m-%d').date()
+            guardian_age = (datetime.date.today() - responsavel_data_nascimento).days / 365.25
+            if guardian_age < 18:
+                return jsonify({"message": "O responsável não pode ser menor de idade."}), 400
+        except (ValueError, KeyError):
+            return jsonify({"message": "Formato de data de nascimento do responsável inválido. Use AAAA-MM-DD."}), 400
+    novo_paciente = Patient(
+        cpf=data['cpf'], nome=data['nome'], email=data['email'], telefone=data['telefone'], data_nascimento=data_nascimento,
+        estado=data['estado'], cidade=data['cidade'], bairro=data['bairro'], cep=data['cep'], rua=data['rua'], numero=data['numero'],
+        responsavel_cpf=data.get('responsavel_cpf'), responsavel_nome=data.get('responsavel_nome'),
+        responsavel_data_nascimento=data.get('responsavel_data_nascimento'), responsavel_email=data.get('responsavel_email'),
+        responsavel_telefone=data.get('responsavel_telefone')
+    )
+    db.session.add(novo_paciente)
+    db.session.commit()
+    return jsonify(novo_paciente.to_json()), 201
+
+@api.route('/patients', methods=['GET'])
+@token_required
+def get_patients(current_user):
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 5, type=int)
+    pagination = Patient.query.paginate(page=page, per_page=per_page, error_out=False)
+    pacientes_da_pagina = pagination.items
+    return jsonify({
+        'pacientes': [paciente.to_json() for paciente in pacientes_da_pagina],
+        'total_pacientes': pagination.total,
+        'total_paginas': pagination.pages,
+        'pagina_atual': pagination.page,
+        'proxima_pagina': pagination.next_num,
+        'pagina_anterior': pagination.prev_num
+    })
+
+@api.route('/patients/<int:patient_id>', methods=['GET'])
+@token_required
+def get_patient(current_user, patient_id):
+    paciente = Patient.query.get_or_404(patient_id)
+    return jsonify(paciente.to_json())
+
+@api.route('/patients/<int:patient_id>', methods=['PUT'])
+@token_required
+def update_patient(current_user, patient_id):
+    paciente_a_atualizar = Patient.query.get_or_404(patient_id)
+    data = request.get_json()
+    
+    if 'responsavel_cpf' in data and data.get('responsavel_cpf') is None and paciente_a_atualizar.responsavel_cpf:
+        # Calcula a idade atual do paciente
+        age = (datetime.date.today() - paciente_a_atualizar.data_nascimento).days / 365.25
+        if age < 18:
+            return jsonify({'message': 'Não é possível remover o responsável de um paciente menor de idade.'}), 403 
+
+    if 'cpf' in data and data['cpf'] != paciente_a_atualizar.cpf:
+        if Patient.query.filter_by(cpf=data['cpf']).first():
+            return jsonify({"message": "CPF já cadastrado em outro paciente."}), 409
+    if 'email' in data and data['email'] != paciente_a_atualizar.email:
+        if Patient.query.filter_by(email=data['email']).first():
+            return jsonify({"message": "Email já cadastrado em outro paciente."}), 409
+
+    paciente_a_atualizar.nome = data.get('nome', paciente_a_atualizar.nome)
+    paciente_a_atualizar.cpf = data.get('cpf', paciente_a_atualizar.cpf)
+    paciente_a_atualizar.email = data.get('email', paciente_a_atualizar.email)
+    paciente_a_atualizar.telefone = data.get('telefone', paciente_a_atualizar.telefone)
+    if 'data_nascimento' in data:
+        try:
+            paciente_a_atualizar.data_nascimento = datetime.datetime.strptime(data['data_nascimento'], '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({"message": "Formato de data de nascimento inválido. Use AAAA-MM-DD."}), 400
+    paciente_a_atualizar.estado = data.get('estado', paciente_a_atualizar.estado)
+    paciente_a_atualizar.cidade = data.get('cidade', paciente_a_atualizar.cidade)
+    paciente_a_atualizar.bairro = data.get('bairro', paciente_a_atualizar.bairro)
+    paciente_a_atualizar.cep = data.get('cep', paciente_a_atualizar.cep)
+    paciente_a_atualizar.rua = data.get('rua', paciente_a_atualizar.rua)
+    paciente_a_atualizar.numero = data.get('numero', paciente_a_atualizar.numero)
+
+    paciente_a_atualizar.responsavel_cpf = data.get('responsavel_cpf', paciente_a_atualizar.responsavel_cpf)
+    paciente_a_atualizar.responsavel_nome = data.get('responsavel_nome', paciente_a_atualizar.responsavel_nome)
+    paciente_a_atualizar.responsavel_data_nascimento = data.get('responsavel_data_nascimento', paciente_a_atualizar.responsavel_data_nascimento)
+    paciente_a_atualizar.responsavel_email = data.get('responsavel_email', paciente_a_atualizar.responsavel_email)
+    paciente_a_atualizar.responsavel_telefone = data.get('responsavel_telefone', paciente_a_atualizar.responsavel_telefone)
+
+    db.session.commit()
+    return jsonify(paciente_a_atualizar.to_json()), 200
+
+@api.route('/patients/<int:patient_id>', methods=['DELETE'])
+@token_required
+def delete_patient(current_user, patient_id):
+    atendimento_existente = Appointment.query.filter_by(paciente_id=patient_id).first()
+    if atendimento_existente:
+        return jsonify({'message': 'Não é possível remover um paciente com atendimentos vinculados.'}), 409
+    paciente = Patient.query.get_or_404(patient_id)
+    db.session.delete(paciente)
+    db.session.commit()
+    return jsonify({'message': f'Paciente {paciente.nome} removido com sucesso.'}), 200
+
+@api.route('/procedures', methods=['POST'])
+@token_required
+@admin_required
+def create_procedure(current_user):
+    data = request.get_json()
+    required_fields = ["nome", "valor_plano_saude", "valor_particular"]
+    if not all(field in data for field in required_fields):
+        return jsonify({"message": "Campos obrigatórios faltando (nome, valor_plano_saude, valor_particular)."}), 400
+    if Procedure.query.filter_by(nome=data['nome']).first():
+        return jsonify({"message": "Já existe um procedimento com este nome."}), 409
+    novo_procedimento = Procedure(
+        nome=data['nome'],
+        descricao=data.get('descricao'),
+        valor_plano_saude=data['valor_plano_saude'],
+        valor_particular=data['valor_particular']
+    )
+    db.session.add(novo_procedimento)
+    db.session.commit()
+    return jsonify(novo_procedimento.to_json()), 201
+
+@api.route('/procedures', methods=['GET'])
+@token_required
+def get_procedures(current_user):
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 5, type=int)
+    pagination = Procedure.query.paginate(page=page, per_page=per_page, error_out=False)
+    procedures_da_pagina = pagination.items
+    return jsonify({
+        'procedimentos': [procedure.to_json() for procedure in procedures_da_pagina],
+        'total_procedimentos': pagination.total,
+        'total_paginas': pagination.pages,
+        'pagina_atual': pagination.page
+    })
+
+@api.route('/procedures/<int:procedure_id>', methods=['GET'])
+@token_required
+def get_procedure(current_user, procedure_id):
+    procedimento = Procedure.query.get_or_404(procedure_id)
+    return jsonify(procedimento.to_json())
+
+@api.route('/procedures/<int:procedure_id>', methods=['PUT'])
+@token_required
+@admin_required
+def update_procedure(current_user, procedure_id):
+    procedimento = Procedure.query.get_or_404(procedure_id)
+    data = request.get_json()
+    if 'nome' in data and data['nome'] != procedimento.nome:
+        if Procedure.query.filter_by(nome=data['nome']).first():
+            return jsonify({"message": "Já existe um procedimento com este nome."}), 409
+    procedimento.nome = data.get('nome', procedimento.nome)
+    procedimento.descricao = data.get('descricao', procedimento.descricao)
+    procedimento.valor_plano_saude = data.get('valor_plano_saude', procedimento.valor_plano_saude)
+    procedimento.valor_particular = data.get('valor_particular', procedimento.valor_particular)
+    db.session.commit()
+    return jsonify(procedimento.to_json()), 200
+
+@api.route('/procedures/<int:procedure_id>', methods=['DELETE'])
+@token_required
+@admin_required
+def delete_procedure(current_user, procedure_id):
+    atendimento_existente = db.session.query(appointment_procedures).filter_by(procedure_id=procedure_id).first()
+    if atendimento_existente:
+        return jsonify({'message': 'Não é possível remover um procedimento que já foi utilizado em um atendimento.'}), 409
+    procedimento = Procedure.query.get_or_404(procedure_id)
+    db.session.delete(procedimento)
+    db.session.commit()
+    return jsonify({'message': f'Procedimento {procedimento.nome} removido com sucesso.'}), 200
+
+@api.route('/appointments', methods=['POST'])
+@token_required
+def create_appointment(current_user):
+    data = request.get_json()
+    required_fields = ['data_atendimento', 'paciente_id', 'tipo', 'procedure_ids']
+    if not all(field in data for field in required_fields):
+        return jsonify({"message": "Campos obrigatórios faltando."}), 400
+    if not isinstance(data['procedure_ids'], list) or len(data['procedure_ids']) == 0:
+        return jsonify({"message": "O atendimento precisa ter pelo menos um procedimento."}), 400
+    if data['tipo'] == 'plano' and not data.get('numero_carteira_plano'):
+        return jsonify({"message": "Número da carteira do plano é obrigatório para atendimentos do tipo 'plano'."}), 400
+    paciente = Patient.query.get(data['paciente_id'])
+    if not paciente:
+        return jsonify({"message": "Paciente não encontrado."}), 404
+    valor_total_calculado = 0
+    procedimentos_selecionados = []
+    for proc_id in data['procedure_ids']:
+        procedimento = Procedure.query.get(proc_id)
+        if not procedimento:
+            return jsonify({"message": f"Procedimento com ID {proc_id} não encontrado."}), 404
+        procedimentos_selecionados.append(procedimento)
+        if data['tipo'] == 'plano':
+            valor_total_calculado += procedimento.valor_plano_saude
+        else: 
+            valor_total_calculado += procedimento.valor_particular
+    try:
+        data_atendimento = datetime.datetime.strptime(data['data_atendimento'], '%Y-%m-%d %H:%M:%S')
+    except ValueError:
+        return jsonify({"message": "Formato de data inválido. Use AAAA-MM-DD HH:MM:SS."}), 400
+    novo_atendimento = Appointment(
+        data_atendimento=data_atendimento,
+        paciente_id=data['paciente_id'],
+        tipo=data['tipo'],
+        numero_carteira_plano=data.get('numero_carteira_plano'),
+        usuario_id=current_user.id, 
+        valor_total=valor_total_calculado
+    )
+    novo_atendimento.procedures.extend(procedimentos_selecionados)
+    db.session.add(novo_atendimento)
+    db.session.commit()
+    return jsonify(novo_atendimento.to_json()), 201
+
+@api.route('/appointments', methods=['GET'])
+@token_required
+def get_appointments(current_user):
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    pagination = Appointment.query.order_by(Appointment.data_atendimento.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    atendimentos_da_pagina = pagination.items
+    return jsonify({
+        'atendimentos': [appointment.to_json() for appointment in atendimentos_da_pagina],
+        'total_atendimentos': pagination.total,
+        'total_paginas': pagination.pages,
+        'pagina_atual': pagination.page
+    })
+
+@api.route('/appointments/<int:appointment_id>', methods=['GET'])
+@token_required
+def get_appointment(current_user, appointment_id):
+    atendimento = Appointment.query.get_or_404(appointment_id)
+    return jsonify(atendimento.to_json())
+
+@api.route('/appointments/<int:appointment_id>', methods=['PUT'])
+@token_required
+def update_appointment(current_user, appointment_id):
+    atendimento = Appointment.query.get_or_404(appointment_id)
+    if atendimento.usuario_id != current_user.id and current_user.tipo != 'admin':
+        return jsonify({'message': 'Acesso não autorizado para alterar este atendimento.'}), 403
+    data = request.get_json()
+    if 'data_atendimento' in data:
+        try:
+            atendimento.data_atendimento = datetime.datetime.strptime(data['data_atendimento'], '%Y-%m-%d %H:%M:%S')
+        except ValueError:
+            return jsonify({"message": "Formato de data inválido. Use AAAA-MM-DD HH:MM:SS."}), 400
+    atendimento.tipo = data.get('tipo', atendimento.tipo)
+    atendimento.numero_carteira_plano = data.get('numero_carteira_plano', atendimento.numero_carteira_plano)
+    if 'procedure_ids' in data:
+        if not isinstance(data['procedure_ids'], list) or len(data['procedure_ids']) == 0:
+            return jsonify({"message": "O atendimento precisa ter pelo menos um procedimento."}), 400
+        valor_total_calculado = 0
+        novos_procedimentos = []
+        for proc_id in data['procedure_ids']:
+            procedimento = Procedure.query.get(proc_id)
+            if not procedimento:
+                return jsonify({"message": f"Procedimento com ID {proc_id} não encontrado."}), 404
+            novos_procedimentos.append(procedimento)
+            if atendimento.tipo == 'plano':
+                valor_total_calculado += procedimento.valor_plano_saude
+            else: 
+                valor_total_calculado += procedimento.valor_particular
+        atendimento.procedures = novos_procedimentos
+        atendimento.valor_total = valor_total_calculado
+    db.session.commit()
+    return jsonify(atendimento.to_json()), 200
+
+@api.route('/appointments/<int:appointment_id>', methods=['DELETE'])
+@token_required
+def delete_appointment(current_user, appointment_id):
+    atendimento = Appointment.query.get_or_404(appointment_id)
+    if atendimento.usuario_id != current_user.id and current_user.tipo != 'admin':
+        return jsonify({'message': 'Acesso não autorizado para remover este atendimento.'}), 403
+    db.session.delete(atendimento)
+    db.session.commit()
+    return jsonify({'message': 'Atendimento removido com sucesso.'}), 200
+
+@api.route('/appointments/by-date', methods=['GET'])
+@token_required
+def get_appointments_by_date(current_user):
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+
+    if not start_date_str or not end_date_str:
+        return jsonify({"message": "Os parâmetros 'start_date' e 'end_date' são obrigatórios."}), 400
+
+    try:
+        start_date = datetime.datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.datetime.strptime(end_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({"message": "Formato de data inválido. Use AAAA-MM-DD."}), 400
+
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+
+    pagination = Appointment.query.filter(
+        Appointment.data_atendimento >= start_date,
+        Appointment.data_atendimento <= end_date
+    ).order_by(Appointment.data_atendimento.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+
+    atendimentos_da_pagina = pagination.items
+
+    return jsonify({
+        'atendimentos': [appointment.to_json() for appointment in atendimentos_da_pagina],
+        'total_atendimentos': pagination.total,
+        'total_paginas': pagination.pages,
+        'pagina_atual': pagination.page
+    })
+
+@api.route('/users/change-password', methods=['PUT'])
+@token_required
+def change_password(current_user):
+    data = request.get_json()
+    senha_antiga = data.get('senha_antiga')
+    senha_nova = data.get('senha_nova')
+
+    if not senha_antiga or not senha_nova:
+        return jsonify({'message': 'Senha antiga e nova são obrigatórias.'}), 400
+
+    if not current_user.check_password(senha_antiga):
+        return jsonify({'message': 'Senha antiga incorreta.'}), 401
+
+    current_user.set_password(senha_nova)
+    db.session.commit()
+
+    return jsonify({'message': 'Senha alterada com sucesso.'}), 200
+
+@api.route('/users/reset-password/<int:user_id>', methods=['PUT'])
+@token_required
+@admin_required
+def admin_reset_password(current_user, user_id):
+    data = request.get_json()
+    senha_nova = data.get('senha_nova')
+
+    if not senha_nova:
+        return jsonify({'message': 'Nova senha é obrigatória.'}), 400
+
+    user_to_reset = User.query.get_or_404(user_id)
+    
+    user_to_reset.set_password(senha_nova)
+    db.session.commit()
+
+    return jsonify({'message': f'Senha do usuário {user_to_reset.nome} foi resetada com sucesso.'}), 200
+
+@api.route('/users/by-email', methods=['GET'])
+@token_required
+def get_user_by_email(current_user):
+    email = request.args.get('email')
+    if not email:
+        return jsonify({'message': 'Parâmetro "email" é obrigatório.'}), 400
+
+    if current_user.tipo != 'admin' and current_user.email != email:
+        return jsonify({'message': 'Acesso não autorizado.'}), 403
+
+    user = User.query.filter_by(email=email).first_or_404()
+    
+    return jsonify(user.to_json())
+
+@api.route('/users', methods=['GET'])
+@token_required
+@admin_required
+def get_users(current_user):
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    
+    pagination = User.query.paginate(page=page, per_page=per_page, error_out=False)
+    users_da_pagina = pagination.items
+
+    return jsonify({
+        'usuarios': [user.to_json() for user in users_da_pagina],
+        'total_usuarios': pagination.total,
+        'total_paginas': pagination.pages,
+        'pagina_atual': pagination.page
+    })
