@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Detalhes do Atendimento{% endblock %}
+
+{% block content %}
+<div class="content-card">
+    <div class="card-header">
+        <h1>Detalhes do Atendimento #{{ appointment.id }}</h1>
+    </div>
+
+    <div class="form-container">
+        <div class="form-group">
+            <label>Responsável pelo Agendamento:</label>
+            <p class="form-control" style="background-color: #e8f6f3; border-color: #2ecc71;">
+                <strong>{{ appointment.user.nome }}</strong> (ID do Usuário: {{ appointment.user.id }})
+            </p>
+        </div>
+
+        <div class="form-group">
+            <label>Paciente:</label>
+            <p class="form-control" style="background-color: #f9f9f9;">{{ appointment.patient.nome }}</p>
+        </div>
+
+        <div class="form-group">
+            <label>Data e Hora:</label>
+            <p class="form-control" style="background-color: #f9f9f9;">{{ appointment.data_atendimento.strftime('%d/%m/%Y às %H:%M') }}</p>
+        </div>
+
+        <div class="form-group">
+            <label>Tipo:</label>
+            <p class="form-control" style="background-color: #f9f9f9;">{{ appointment.tipo.capitalize() }}</p>
+        </div>
+
+        {% if appointment.tipo == 'plano' %}
+        <div class="form-group">
+            <label>Carteira do Plano:</label>
+            <p class="form-control" style="background-color: #f9f9f9;">{{ appointment.numero_carteira_plano }}</p>
+        </div>
+        {% endif %}
+
+        <div class="form-group">
+            <label>Procedimentos Realizados:</label>
+            <ul style="list-style-type: disc; margin-left: 20px; margin-top: 10px;">
+                {% for procedure in appointment.procedures %}
+                <li>{{ procedure.nome }} (R$ {{ "%.2f"|format(procedure.valor_plano_saude if appointment.tipo == 'plano' else procedure.valor_particular) }})</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div class="form-group">
+            <label>Valor Total:</label>
+            <p class="form-control" style="font-weight: bold; color: #2ecc71;">R$ {{ "%.2f"|format(appointment.valor_total) }}</p>
+        </div>
+
+        <div style="margin-top: 30px; display: flex; align-items: center; gap: 10px;">
+            <a href="{{ url_for('appointment_list') }}" class="btn-secondary" style="height: 40px; line-height: 20px; display: inline-flex; align-items: center;">Voltar</a>
+            
+            <form action="{{ url_for('delete_appointment', appointment_id=appointment.id) }}" method="post" onsubmit="return confirm('Tem certeza que deseja excluir este registro permanentemente?');" style="margin: 0;">
+                <button type="submit" class="btn btn-primary" style="background-color: #e74c3c; height: 40px; border: none; cursor: pointer;">Excluir Atendimento</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

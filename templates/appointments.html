@@ -32,10 +32,14 @@
                     {% endfor %}
                     </ul>
                 </td>
-                <td>{{ appointment.tipo.capitalize() }}</td>
+                <td>
+    <span class="badge badge-{{ appointment.tipo }}">
+        {{ appointment.tipo.capitalize() }}
+    </span>
+</td>
                 <td>{{ "%.2f"|format(appointment.valor_total) }}</td>
                 <td>
-                    <a href="#">Detalhes</a>
+                    <a href="{{ url_for('view_appointment', appointment_id=appointment.id) }}" class="action-link">Detalhes</a>
                 </td>
             </tr>
             {% else %}

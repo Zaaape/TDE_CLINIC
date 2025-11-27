@@ -7,7 +7,6 @@ from datetime import datetime
 from functools import wraps
 import re
 
-# --- FILTROS DE TEMPLATE (JINJA2) ---
 # Estas funções formatam dados "feios" do banco para ficarem bonitos no HTML.
 # Exemplo: Transforma "12345678900" em "123.456.789-00"
 
@@ -29,7 +28,6 @@ def format_telefone(value):
         return f'({digits[:2]}) {digits[2:6]}-{digits[6:]}'
     return value
 
-# --- FÁBRICA DA APLICAÇÃO ---
 # O Flask usa esse padrão para criar o app. Facilita testes e configurações.
 
 def create_app():
@@ -45,24 +43,20 @@ def create_app():
     bcrypt.init_app(app)   # Criptografia de senhas
     Migrate(app, db)       # Ferramenta de migração (alterar tabelas sem perder dados)
 
-    # Registra o Blueprint da API (conecta o arquivo routes.py a este app)
+    # Registra o Blueprint da API (conecta o routes.py a este app)
     app.register_blueprint(api, url_prefix='/api')
-
-    # --- DECORATORS DE PROTEÇÃO (MIDDLEWARE) ---
-    
-    # 1. Login Required: Verifica se o usuário tem uma sessão ativa.
-    # Se não tiver, joga ele para a tela de login.
+ 
+    # 1. Login Required: Verifica se o usuário tem uma sessão ativa. Se não tiver, joga ele para a tela de login.
     def login_required(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            if 'user_id' not in session: # 'session' é um cookie seguro e criptografado
+            if 'user_id' not in session: 
                 flash('Por favor, faça login para acessar esta página.', 'danger')
                 return redirect(url_for('login'))
             return f(*args, **kwargs)
         return decorated_function
 
     # 2. Admin Required: Verifica se, além de logado, o tipo do usuário é 'admin'.
-    # Isso impede que recepcionistas acessem áreas sensíveis (como criar usuários).
     def admin_required(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
@@ -123,7 +117,7 @@ def create_app():
     # --- GESTÃO DE USUÁRIOS (APENAS ADMIN) ---
 
     @app.route("/users")
-    @admin_required # Protegido!
+    @admin_required 
     def user_list():
         page = request.args.get('page', 1, type=int)
         usuarios_paginados = User.query.order_by(User.nome).paginate(page=page, per_page=10, error_out=False)
@@ -170,18 +164,36 @@ def create_app():
     @app.route('/users/delete/<int:user_id>', methods=['POST'])
     @admin_required
     def delete_user(user_id):
-        # Proteção para não deixar o admin apagar a si mesmo acidentalmente
+        # Proteção para não deixar o admin apagar a si mesmo
         if user_id == session.get('user_id'):
             flash('Você não pode remover a si mesmo.', 'danger')
             return redirect(url_for('user_list'))
         
         user = User.query.get_or_404(user_id)
+        
+        # Buscamos TODOS os atendimentos vinculados a este usuário
+        atendimentos_do_usuario = Appointment.query.filter_by(usuario_id=user_id).all()
+        
+        if atendimentos_do_usuario:
+            # Montamos uma mensagem listando as datas e os pacientes desses atendimentos
+            detalhes = []
+            for a in atendimentos_do_usuario:
+                data_fmt = a.data_atendimento.strftime('%d/%m/%Y')
+                # Como temos o relacionamento .patient, podemos pegar o nome do paciente
+                detalhes.append(f"{data_fmt} (Pac: {a.patient.nome})")
+            
+            # Junta tudo numa string separada por vírgula
+            msg_erro = f"Não é possível excluir {user.nome}. Ele(a) é responsável pelos atendimentos: {', '.join(detalhes)}. Exclua esses atendimentos antes de remover o usuário."
+            
+            flash(msg_erro, 'danger')
+            return redirect(url_for('user_list'))
+
         db.session.delete(user)
         db.session.commit()
         flash('Usuário removido com sucesso.', 'success')
         return redirect(url_for('user_list'))
 
-    # --- PROCEDIMENTOS (CRUD COMPLETO E PROTEGIDO) ---
+    # --- PROCEDIMENTOS (CRUD COMPLETO) ---
     
     @app.route("/procedures")
     @login_required # Qualquer usuário logado pode VER a lista
@@ -197,7 +209,6 @@ def create_app():
             new_procedure = Procedure(
                 nome=request.form['nome'],
                 descricao=request.form.get('descricao'),
-                # HTML envia números como string, o banco converte para Numeric automaticamente
                 valor_plano_saude=request.form['valor_plano_saude'],
                 valor_particular=request.form['valor_particular']
             )
@@ -230,7 +241,7 @@ def create_app():
         flash('Procedimento removido com sucesso.', 'success')
         return redirect(url_for('procedure_list'))
     
-    # --- ATENDIMENTOS (CORE DO SISTEMA) ---
+    # --- ATENDIMENTOS ---
     
     @app.route("/appointments")
     @login_required
@@ -246,7 +257,7 @@ def create_app():
         if request.method == 'POST':
             # Captura dados complexos do formulário
             paciente_id = request.form.get('paciente_id')
-            procedure_ids = request.form.getlist('procedure_ids') # Checkbox múltiplo
+            procedure_ids = request.form.getlist('procedure_ids') 
             data_str = request.form.get('data_atendimento')
             tipo = request.form.get('tipo') # 'plano' ou 'particular'
             numero_carteira = request.form.get('numero_carteira_plano')
@@ -256,7 +267,7 @@ def create_app():
                 flash('Erro: Todos os campos são obrigatórios.', 'danger')
                 return redirect(url_for('create_appointment_form'))
 
-            # LÓGICA DE NEGÓCIO: Cálculo do valor total
+            # Cálculo do valor total
             valor_total_calculado = 0
             procedimentos_selecionados = Procedure.query.filter(Procedure.id.in_(procedure_ids)).all()
             
@@ -276,7 +287,6 @@ def create_app():
                 valor_total=valor_total_calculado
             )
             
-            # SQLAlchemy cuida da tabela de associação Many-to-Many aqui
             novo_atendimento.procedures.extend(procedimentos_selecionados)
 
             db.session.add(novo_atendimento)
@@ -351,6 +361,28 @@ def create_app():
         db.session.commit()
         flash('Paciente removido com sucesso.', 'success')
         return redirect(url_for('index'))
+
+    # VISUALIZAR DETALHES DO ATENDIMENTO ---
+    @app.route('/appointments/<int:appointment_id>')
+    @login_required
+    def view_appointment(appointment_id):
+        appointment = Appointment.query.get_or_404(appointment_id)
+        return render_template('appointment_details.html', appointment=appointment)
+
+    # DELETAR ATENDIMENTO ---
+    @app.route('/appointments/delete/<int:appointment_id>', methods=['POST'])
+    @login_required
+    def delete_appointment(appointment_id):
+        appointment = Appointment.query.get_or_404(appointment_id)
+        # Permissão: Apenas Admin ou quem criou pode deletar
+        if appointment.usuario_id != session['user_id'] and session['user_tipo'] != 'admin':
+            flash('Você não tem permissão para excluir este atendimento.', 'danger')
+            return redirect(url_for('appointment_list'))
+            
+        db.session.delete(appointment)
+        db.session.commit()
+        flash('Atendimento removido com sucesso.', 'success')
+        return redirect(url_for('appointment_list'))
 
     return app
 

@@ -5,8 +5,8 @@ import datetime
 from functools import wraps
 import os
 
-# Cria um 'Blueprint' para organizar as rotas da API.
-# Isso permite que essas rotas sejam registradas no app principal (app.py) com um prefixo (ex: /api).
+# Cria um 'Blueprint' para organizar as rotas da API pra permitir que essas rotas sejam registradas no app principal (app.py) com um prefixo (ex: /api).
+
 api = Blueprint('api', __name__)
 
 # --- FUNÇÕES DE AUTENTICAÇÃO ---
@@ -33,16 +33,14 @@ def generate_token(user):
         return e
 
 def token_required(f):
-    """
-    Decorator (decorador) para proteger rotas.
-    Verifica se a requisição possui um token JWT válido no cabeçalho.
-    """
+   
+    #Decorator (decorador) para proteger rotas. Verifica se a requisição possui um token JWT válido no cabeçalho.
+
     @wraps(f)
     def decorated(*args, **kwargs):
         token = None
         # Verifica se o cabeçalho 'Authorization' está presente na requisição
         if 'Authorization' in request.headers:
-            # O formato padrão é "Bearer <token>", então pegamos a segunda parte
             token = request.headers['Authorization'].split(" ")[1]
 
         # Se não houver token, retorna erro 401 (Não Autorizado)
@@ -62,10 +60,7 @@ def token_required(f):
     return decorated
 
 def admin_required(f):
-    """
-    Decorator para restringir acesso apenas a administradores.
-    Deve ser usado DEPOIS de @token_required.
-    """
+    #Decorator para restringir acesso apenas a administradores. Deve ser usado DEPOIS de @token_required.
     @wraps(f)
     def decorated(current_user, *args, **kwargs):
         # Verifica o campo 'tipo' do usuário carregado do banco
@@ -79,10 +74,9 @@ def admin_required(f):
 
 @api.route('/login', methods=['POST'])
 def login():
-    """
-    Rota pública para autenticação. Recebe JSON com email e senha.
-    Retorna um token JWT se as credenciais forem válidas.
-    """
+    
+    # Rota pública para autenticação. Recebe JSON com email e senha e retorna um token JWT se as credenciais forem válidas.
+    
     auth = request.get_json()
     # Validação básica de entrada
     if not auth or not auth.get('email') or not auth.get('senha'):
@@ -106,7 +100,7 @@ def login():
 @token_required # Exige estar logado
 @admin_required # Exige ser admin
 def create_user(current_user):
-    """Cria um novo usuário (apenas Admin pode fazer isso)."""
+    # Cria um novo usuário (apenas Admin pode fazer isso)."""
     data = request.get_json()
     # Valida campos obrigatórios
     if not data or not data.get('email') or not data.get('senha') or not data.get('nome'):
@@ -132,7 +126,7 @@ def create_user(current_user):
 @api.route('/users/<int:user_id>', methods=['PUT'])
 @token_required
 def update_user(current_user, user_id):
-    """Atualiza dados do usuário. O próprio usuário só pode alterar a si mesmo."""
+    # Atualiza dados do usuário. O próprio usuário só pode alterar a si mesmo."""
     # Garante que usuário comum não altere dados de outro usuário
     if current_user.id != user_id:
         return jsonify({'message': 'Acesso não autorizado para atualizar este usuário.'}), 403
@@ -157,7 +151,7 @@ def update_user(current_user, user_id):
 @token_required
 @admin_required
 def delete_user(current_user, user_id):
-    """Remove um usuário (apenas Admin)."""
+    # Remove um usuário (apenas Admin).
     # Proteção: Admin não pode se deletar
     if current_user.id == user_id:
         return jsonify({'message': 'Um administrador não pode remover a si mesmo.'}), 403
@@ -178,7 +172,7 @@ def delete_user(current_user, user_id):
 @api.route('/patients', methods=['POST'])
 @token_required
 def create_patient(current_user):
-    """Cadastra novo paciente com validação de idade/responsável."""
+    # Cadastra novo paciente com validação de idade/responsável.
     data = request.get_json()
     
     # Lista de campos obrigatórios
@@ -231,7 +225,7 @@ def create_patient(current_user):
 @api.route('/patients', methods=['GET'])
 @token_required
 def get_patients(current_user):
-    """Lista pacientes com paginação."""
+    # Lista pacientes com paginação.
     # Pega parâmetros da URL (ex: ?page=2&per_page=10)
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 5, type=int)
@@ -260,7 +254,7 @@ def get_patient(current_user, patient_id):
 @api.route('/patients/<int:patient_id>', methods=['PUT'])
 @token_required
 def update_patient(current_user, patient_id):
-    """Atualiza dados do paciente."""
+    # Atualiza dados do paciente.
     paciente_a_atualizar = Patient.query.get_or_404(patient_id)
     data = request.get_json()
     
@@ -311,8 +305,7 @@ def update_patient(current_user, patient_id):
 @api.route('/patients/<int:patient_id>', methods=['DELETE'])
 @token_required
 def delete_patient(current_user, patient_id):
-    """Remove paciente, verificando integridade referencial."""
-    # Se o paciente já teve consultas, não pode deletar (histórico médico)
+    # Remove paciente, verificando integridade referencial. Se o paciente já teve consultas, não pode deletar (histórico médico)
     atendimento_existente = Appointment.query.filter_by(paciente_id=patient_id).first()
     if atendimento_existente:
         return jsonify({'message': 'Não é possível remover um paciente com atendimentos vinculados.'}), 409
@@ -391,7 +384,7 @@ def update_procedure(current_user, procedure_id):
 @token_required
 @admin_required
 def delete_procedure(current_user, procedure_id):
-    # Não remove procedimento se ele já foi usado em algum atendimento (integridade financeira)
+    # Não remove procedimento se ele já foi usado em algum atendimento 
     atendimento_existente = db.session.query(appointment_procedures).filter_by(procedure_id=procedure_id).first()
     if atendimento_existente:
         return jsonify({'message': 'Não é possível remover um procedimento que já foi utilizado em um atendimento.'}), 409
@@ -488,7 +481,7 @@ def get_appointment(current_user, appointment_id):
 @api.route('/appointments/<int:appointment_id>', methods=['PUT'])
 @token_required
 def update_appointment(current_user, appointment_id):
-    """Atualiza atendimento e recalcula valores se necessário."""
+    # Atualiza atendimento e recalcula valores se necessário.
     atendimento = Appointment.query.get_or_404(appointment_id)
     
     # Permissão: Só quem criou ou admin pode alterar
@@ -623,7 +616,7 @@ def admin_reset_password(current_user, user_id):
 @api.route('/users/by-email', methods=['GET'])
 @token_required
 def get_user_by_email(current_user):
-    """Busca usuário específico por email."""
+    # Busca usuário específico por email.
     email = request.args.get('email')
     if not email:
         return jsonify({'message': 'Parâmetro "email" é obrigatório.'}), 400
@@ -640,7 +633,7 @@ def get_user_by_email(current_user):
 @token_required
 @admin_required
 def get_users(current_user):
-    """Lista todos os usuários do sistema (apenas Admin)."""
+    #Lista todos os usuários do sistema (apenas Admin).
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 10, type=int)
     
