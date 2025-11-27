@@ -314,7 +314,13 @@ body.login-body {
     display: flex;
     justify-content: center;
     align-items: center;
-    background-color: var(--color-background);
+    
+    background: 
+        linear-gradient(rgba(255, 255, 255, 0.30), rgba(255, 255, 255, 0.85)),
+        url('../img/clinica_medica.png');
+        
+    background-size: cover;
+    background-position: center;
 }
 
 .login-form-card {

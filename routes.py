@@ -192,7 +192,7 @@ def create_patient(current_user):
     except ValueError:
         return jsonify({"message": "Formato de data de nascimento inválido. Use AAAA-MM-DD."}), 400
         
-    # REGRA DE NEGÓCIO: Validação de Menor de Idade
+    # Validação de Menor de Idade
     age = (datetime.date.today() - data_nascimento).days / 365.25
     if age < 18:
         # Se for menor, exige dados do responsável
@@ -200,7 +200,7 @@ def create_patient(current_user):
         if not all(field in data for field in required_guardian_fields):
             return jsonify({"message": "Campos obrigatórios do responsável faltando para paciente menor de idade."}), 400
         
-        # Valida se o responsável também não é menor de idade (opcional, mas boa prática)
+        # Valida se o responsável também não é menor de idade 
         try:
             responsavel_data_nascimento = datetime.datetime.strptime(data['responsavel_data_nascimento'], '%Y-%m-%d').date()
             guardian_age = (datetime.date.today() - responsavel_data_nascimento).days / 365.25

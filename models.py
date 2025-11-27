@@ -67,8 +67,7 @@ class Patient(db.Model):
     rua = db.Column(db.String(255), nullable=False)
     numero = db.Column(db.String(20), nullable=False)
     
-    # Dados do Responsável (Opcionais - nullable=True padrão do SQLAlchemy se não especificar False)
-    # Só serão preenchidos se o paciente for menor de idade (lógica controlada no routes.py)
+    # Dados do Responsável, só serão preenchidos se o paciente for menor de idade (lógica controlada no routes.py)
     responsavel_cpf = db.Column(db.String(14))
     responsavel_nome = db.Column(db.String(255))
     responsavel_data_nascimento = db.Column(db.Date)

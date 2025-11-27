@@ -247,8 +247,23 @@ def create_app():
     @login_required
     def appointment_list():
         page = request.args.get('page', 1, type=int)
-        # Faz um JOIN com a tabela de Pacientes para exibir o nome do paciente na lista
-        atendimentos_paginados = db.session.query(Appointment).join(Patient).order_by(Appointment.data_atendimento.desc()).paginate(page=page, per_page=10, error_out=False)
+    
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        query = db.session.query(Appointment).join(Patient)
+        
+        if start_date and end_date:
+            try:
+                s_date = datetime.strptime(start_date, '%Y-%m-%d')
+                e_date = datetime.strptime(end_date, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+                query = query.filter(Appointment.data_atendimento.between(s_date, e_date))
+            except ValueError:
+                flash('Datas inválidas para o filtro.', 'warning')
+        
+        # Ordenação e Paginação
+        atendimentos_paginados = query.order_by(Appointment.data_atendimento.desc()).paginate(page=page, per_page=10, error_out=False)
+        
         return render_template("appointments.html", pagination=atendimentos_paginados, endpoint='appointment_list')
 
     @app.route('/appointments/new', methods=['GET', 'POST'])
@@ -306,15 +321,34 @@ def create_app():
     @login_required
     def create_patient():
         if request.method == 'POST':
-            data_nascimento = datetime.strptime(request.form['data_nascimento'], '%Y-%m-%d').date()
+            # 1. Verifica duplicidade ANTES de tentar salvar
+            if Patient.query.filter_by(cpf=request.form['cpf']).first():
+                flash('Erro: Já existe um paciente com este CPF.', 'danger')
+                return render_template('patient_form.html', patient=None) 
+            
+            if Patient.query.filter_by(email=request.form['email']).first():
+                flash('Erro: Já existe um paciente com este E-mail.', 'danger')
+                return render_template('patient_form.html', patient=None)
+
+            # 2. Validação de Idade e Responsável
+            data_nasc = datetime.strptime(request.form['data_nascimento'], '%Y-%m-%d').date()
+            idade = (datetime.now().date() - data_nasc).days / 365.25
+            
+            resp_nome = request.form.get('responsavel_nome')
+            resp_cpf = request.form.get('responsavel_cpf')
+            
+            if idade < 18 and (not resp_nome or not resp_cpf):
+                flash('Erro: Para menores de 18 anos, os dados do responsável são obrigatórios.', 'danger')
+                return render_template('patient_form.html', patient=None)
+
+            # Se passou, cria o paciente
             novo_paciente = Patient(
                 nome=request.form['nome'], cpf=request.form['cpf'], email=request.form['email'],
-                telefone=request.form['telefone'], data_nascimento=data_nascimento,
+                telefone=request.form['telefone'], data_nascimento=data_nasc,
                 cep=request.form['cep'], rua=request.form['rua'], numero=request.form['numero'],
                 bairro=request.form['bairro'], cidade=request.form['cidade'], estado=request.form['estado'],
-                # Campos do responsável (opcionais no HTML, mas obrigatórios por lógica se for menor de idade - validação completa está no routes.py/API)
-                responsavel_nome=request.form.get('responsavel_nome'),
-                responsavel_cpf=request.form.get('responsavel_cpf')
+                responsavel_nome=resp_nome,
+                responsavel_cpf=resp_cpf
             )
             db.session.add(novo_paciente)
             db.session.commit()
