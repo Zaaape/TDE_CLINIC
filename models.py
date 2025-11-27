@@ -8,14 +8,14 @@ db = SQLAlchemy()
 bcrypt = Bcrypt()
 
 # TABELA ASSOCIATIVA 
-# Esta tabela não é uma classe (Model) completa porque ela serve apenas para ligar
-# 'appointments' (atendimentos) e 'procedures' (procedimentos). 
+# Esta tabela serve apenas para ligar'appointments' (atendimentos) e 'procedures' (procedimentos). 
 appointment_procedures = db.Table('appointment_procedures',
     db.Column('appointment_id', db.Integer, db.ForeignKey('appointments.id'), primary_key=True),
     db.Column('procedure_id', db.Integer, db.ForeignKey('procedures.id'), primary_key=True)
 )
 
 # --- MODELO DE USUÁRIO (LOGIN) ---
+
 class User(db.Model):
     __tablename__ = 'users' # Nome real da tabela no banco de dados
 
@@ -27,18 +27,17 @@ class User(db.Model):
     # ATENÇÃO: Nunca salvamos a senha real. Salvamos apenas o HASH (senha criptografada).
     senha_hash = db.Column(db.String(255), nullable=False)
 
-    # Método para definir a senha.
-    # Ele pega a senha em texto plano ('123456'), gera um hash seguro e salva no objeto.
+    # Método para definir a senha, pega a senha em texto plano ('123456'), gera um hash seguro e salva no objeto.
+
     def set_password(self, senha):
         self.senha_hash = bcrypt.generate_password_hash(senha).decode('utf-8')
 
-    # Método para verificar login.
-    # Ele compara a senha que o usuário digitou agora com o hash salvo no banco.
+    # Método para verificar login, compara a senha que o usuário digitou agora com o hash salvo no banco.
     def check_password(self, senha):
         return bcrypt.check_password_hash(self.senha_hash, senha)
 
     # Converte o objeto do banco para um Dicionário Python (JSON).
-    # Útil para a API retornar os dados para o front-end ou aplicativos móveis.
+
     def to_json(self):
         return {
             "id": self.id,
@@ -49,6 +48,7 @@ class User(db.Model):
         }
 
 # --- MODELO DE PACIENTE ---
+
 class Patient(db.Model):
     __tablename__ = 'patients'
 
@@ -93,6 +93,7 @@ class Patient(db.Model):
                 "numero": self.numero
             },
             # Retorna objeto responsavel apenas se existir (operador ternário)
+
             "responsavel": {
                 "cpf": self.responsavel_cpf,
                 "nome": self.responsavel_nome,
@@ -103,6 +104,7 @@ class Patient(db.Model):
         }
 
 # --- MODELO DE PROCEDIMENTO ---
+
 class Procedure(db.Model):
     __tablename__ = 'procedures'
 
@@ -115,7 +117,7 @@ class Procedure(db.Model):
     valor_particular = db.Column(db.Numeric(10, 2), nullable=False)
 
     # Relacionamento Reverso: Permite acessar todos os agendamentos que usaram este procedimento.
-    # 'secondary' aponta para a tabela associativa criada no topo do arquivo.
+
     appointments = db.relationship('Appointment', secondary=appointment_procedures, back_populates='procedures')
 
     def to_json(self):
@@ -123,12 +125,12 @@ class Procedure(db.Model):
             "id": self.id,
             "nome": self.nome,
             "descricao": self.descricao,
-            # Convertemos Numeric para string para preservar precisão decimal no JSON
             "valor_plano_saude": str(self.valor_plano_saude),
             "valor_particular": str(self.valor_particular)
         }
 
 # --- MODELO DE ATENDIMENTO (O HUB CENTRAL) ---
+
 class Appointment(db.Model):
     __tablename__ = 'appointments'
     
@@ -136,25 +138,25 @@ class Appointment(db.Model):
     data_atendimento = db.Column(db.TIMESTAMP, nullable=False)
     
     # Chave Estrangeira (ForeignKey): Liga este agendamento a um Paciente existente
+
     paciente_id = db.Column(db.Integer, db.ForeignKey('patients.id'), nullable=False)
     
     tipo = db.Column(db.String(50), nullable=False) # 'plano' ou 'particular'
     numero_carteira_plano = db.Column(db.String(100)) # Opcional, só se tipo == 'plano'
     
     # Chave Estrangeira: Liga ao Usuário (Funcionário) que criou o agendamento
+
     usuario_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     
     valor_total = db.Column(db.Numeric(10, 2), nullable=False)
     
     # --- RELACIONAMENTOS (ORM) ---
-    # Estes atributos não existem no banco como colunas, são "mágica" do SQLAlchemy
-    # para permitir acessar os objetos relacionados diretamente no código.
     
     patient = db.relationship('Patient') # Ex: meu_agendamento.patient.nome
     user = db.relationship('User')       # Ex: meu_agendamento.user.email
     
     # Relacionamento N:N
-    # Ex: meu_agendamento.procedures retorna uma lista [Procedimento A, Procedimento B]
+
     procedures = db.relationship('Procedure', secondary=appointment_procedures, back_populates='appointments')
 
     def to_json(self):
